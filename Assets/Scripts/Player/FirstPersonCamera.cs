@@ -6,7 +6,13 @@ public class FirstPersonCamera : MonoBehaviour
     public float mouseSensitivity = 3f;
     public float minPitch = -85f;
     public float maxPitch = 85f;
-    public float eyeHeight = 1.5f; // 캐릭터 발바닥 기준 눈높이 (보통 1.5 ~ 1.7)
+
+    [Header("Height Settings")]
+    public float standEyeHeight = 1.5f;  // 서 있을 때 눈높이
+    public float crouchEyeHeight = 0.8f; // 웅크렸을 때 눈높이
+    public float crouchTransitionSpeed = 8f; // 앉고 일어서는 속도
+
+    private float currentEyeHeight; // 현재 실시간 눈높이
 
     [Header("Head Bobbing Settings")]
     public float walkBobSpeed = 12f;
@@ -20,24 +26,23 @@ public class FirstPersonCamera : MonoBehaviour
 
     private float pitch = 0f;
     private float timer = 0f;
-
-    // 원래 카메라의 앞뒤(Z)/좌우(X) 위치를 저장할 변수
     private float defaultX;
     private float defaultZ;
 
     void Start()
     {
-        // 에디터에서 유저가 직접 세팅한 카메라의 초기 X, Z 위치를 기억해둠!
         defaultX = transform.localPosition.x;
         defaultZ = transform.localPosition.z;
 
-        // 시작할 때 Y값만 눈 높이로 초기화
-        transform.localPosition = new Vector3(defaultX, eyeHeight, defaultZ);
+        // 시작할 때는 서 있는 높이로 설정
+        currentEyeHeight = standEyeHeight;
+        transform.localPosition = new Vector3(defaultX, currentEyeHeight, defaultZ);
     }
 
     void LateUpdate()
     {
         HandleMouseLook();
+        HandleCrouchHeight(); // 웅크리기 높이 계산 추가
         HandleHeadBob();
     }
 
@@ -50,12 +55,21 @@ public class FirstPersonCamera : MonoBehaviour
         transform.localRotation = Quaternion.Euler(pitch, 0f, 0f);
     }
 
+    void HandleCrouchHeight()
+    {
+        // PlayerMovement와 동일하게 LeftControl 키를 체크
+        // Ctrl을 누르고 있으면 웅크린 높이, 떼면 서 있는 높이를 목표로 설정
+        float targetHeight = Input.GetKey(KeyCode.LeftControl) ? crouchEyeHeight : standEyeHeight;
+
+        // 목표 높이로 부드럽게 보간(Lerp)
+        currentEyeHeight = Mathf.Lerp(currentEyeHeight, targetHeight, Time.deltaTime * crouchTransitionSpeed);
+    }
+
     void HandleHeadBob()
     {
         float horizontal = Input.GetAxis("Horizontal");
         float vertical = Input.GetAxis("Vertical");
 
-        // 입력이 있어서 이동 중일 때
         if (Mathf.Abs(horizontal) > 0.1f || Mathf.Abs(vertical) > 0.1f)
         {
             float currentBobSpeed = walkBobSpeed;
@@ -73,17 +87,16 @@ public class FirstPersonCamera : MonoBehaviour
             }
 
             timer += Time.deltaTime * currentBobSpeed;
-            float newY = eyeHeight + Mathf.Sin(timer) * currentBobAmount;
+            // 기준점을 고정된 eyeHeight가 아니라 실시간으로 변하는 currentEyeHeight로 변경!
+            float newY = currentEyeHeight + Mathf.Sin(timer) * currentBobAmount;
 
-            // X와 Z는 처음 설정한 값을 유지하고, Y만 위아래로 흔들리게 수정!
             transform.localPosition = new Vector3(defaultX, newY, defaultZ);
         }
         else
         {
             timer = 0f;
-            float resetY = Mathf.Lerp(transform.localPosition.y, eyeHeight, Time.deltaTime * 5f);
-
-            // X와 Z는 유지!
+            // 멈췄을 때도 현재 눈높이(앉은 상태면 앉은 높이)로 부드럽게 복귀
+            float resetY = Mathf.Lerp(transform.localPosition.y, currentEyeHeight, Time.deltaTime * 5f);
             transform.localPosition = new Vector3(defaultX, resetY, defaultZ);
         }
     }
